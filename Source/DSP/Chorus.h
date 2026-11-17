@@ -46,8 +46,12 @@ private:
     bool onoff;
     float depth_multiplier;
     
+    float depth_target = 0.003f;
+    float depth_smoothing = 0.001f;
+    
     float center_delay_time;
     
-    MonoDelay *delay;
+//    MonoDelay *delay;
+    MonoHLPFDelay *delay;
     SineGenerator *sine;
 };

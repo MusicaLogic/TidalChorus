@@ -240,30 +240,76 @@ MonoHLPFDelay::~MonoHLPFDelay()
     hpf.~HighPassFilter();
 }
 
-float MonoHLPFDelay::process_sample(float s){
-    // adjust delay time
-    if(delay_samples_current < (float)delay_samples_target-1){
-        delay_samples_current = delay_samples_current + dtime_change_speed;
-    }else if(delay_samples_current > (float)delay_samples_target+1){
-        delay_samples_current = delay_samples_current - dtime_change_speed;
-    }
-    delay_samples_current_int = (int)delay_samples_current;
-    // write to circular buffer
-    read_pointer = write_pointer - delay_samples_current_int < 0 ? max_delay_samples + write_pointer - delay_samples_current_int : write_pointer - delay_samples_current_int ;
-    circular_buffer[ write_pointer ] = hpf.process_sample( lpf.process_sample( s + feedback*circular_buffer[ read_pointer ] ) );
+//float MonoHLPFDelay::process_sample(float s){
+//    // adjust delay time
+//    if(delay_samples_current < (float)delay_samples_target-1){
+//        delay_samples_current = delay_samples_current + dtime_change_speed;
+//    }else if(delay_samples_current > (float)delay_samples_target+1){
+//        delay_samples_current = delay_samples_current - dtime_change_speed;
+//    }
+//    delay_samples_current_int = (int)delay_samples_current;
+//    // write to circular buffer
+//    read_pointer = write_pointer - delay_samples_current_int < 0 ? max_delay_samples + write_pointer - delay_samples_current_int : write_pointer - delay_samples_current_int ;
+//    circular_buffer[ write_pointer ] = hpf.process_sample( lpf.process_sample( s + feedback*circular_buffer[ read_pointer ] ) );
+//    write_pointer++;
+//    write_pointer = write_pointer%max_delay_samples;
+//    return dry*s + wet*circular_buffer[ read_pointer ];
+//}
+
+
+float MonoHLPFDelay::process_sample(float s)
+{
+    // Calculate fractional read position.
+    float read_position =
+        static_cast<float>(write_pointer) - delay_samples_current;
+
+    // Wrap around circular buffer.
+    while (read_position < 0.0f)
+        read_position += max_delay_samples;
+
+    while (read_position >= max_delay_samples)
+        read_position -= max_delay_samples;
+
+    // Two adjacent samples.
+    int index1 = static_cast<int>(read_position);
+    int index2 = (index1 + 1) % max_delay_samples;
+
+    // Fractional position.
+    float fraction = read_position - static_cast<float>(index1);
+
+    // Linear interpolation.
+    float delayed =
+        circular_buffer[index1] +
+        fraction * (circular_buffer[index2] -
+                    circular_buffer[index1]);
+
+    // Feedback and filtering.
+    float input = s + feedback * delayed;
+
+    circular_buffer[write_pointer] =
+        hpf.process_sample(lpf.process_sample(input));
+
+    // Advance write pointer.
     write_pointer++;
-    write_pointer = write_pointer%max_delay_samples;
-    return dry*s + wet*circular_buffer[ read_pointer ];
+    write_pointer %= max_delay_samples;
+
+    return dry * s + wet * delayed;
 }
+
 
 void MonoHLPFDelay::setSampleRate(float sr){
     sample_rate = sr;
     lpf.prepare(sample_rate, low_frequency, low_q);
     hpf.prepare(sample_rate, high_frequency, high_q);
 }
-void MonoHLPFDelay::setDelayTime(float d){
+//void MonoHLPFDelay::setDelayTime(float d){
+//    delay_time = d;
+//    delay_samples_target = (int)(delay_time*(float)sample_rate);
+//}
+void MonoHLPFDelay::setDelayTime(float d)
+{
     delay_time = d;
-    delay_samples_target = (int)(delay_time*(float)sample_rate);
+    delay_samples_current = d * sample_rate;
 }
 void MonoHLPFDelay::setFeedback(float f){
     feedback = f;
